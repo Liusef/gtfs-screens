@@ -1,0 +1,71 @@
+1 -> towards east bay or north
+2 -> towards sf/peninsula or south
+
+LINE INFO
+Name: "Yellow"
+Color: <Insert Hex Code>
+route1: [mlbr...pitt]
+route1poi: [(1, "SFO", "SFO Airport"), (6, "SF", "San Francisco")]
+route2: [pitt..mlbr]
+route2poi: [(12, "SF", "San Francisco"), (19, "SFO", "SFO Airport")]
+
+
+LINE RT INFO
+route1 trips: [list of trip ids]
+route2 trips: [list of trip ids]
+
+STN INFO
+Id: "12TH"
+Name: "12th. Street / Oakland City Center"
+Routes: [Y1, Y2, R1, R2, O1, O2] 
+Route Order: (index in route arr)
+	Y1: 15
+	Y2: 10
+	R1: 15
+	R2: 8
+	O1: 12
+	o2: 8
+Platforms: 
+	1: [Y1]
+	2: [Y2, R2, O2]
+	3: [R1, O1]
+Transfers per ld:
+	Y1: [(R1, 19TH), (O1, 19TH)]
+	Y2: [(R2, BALB)]
+	R1: [(Y1, 19TH)]
+	R2: [(Y2, BALB)]
+	O1: [(Y1, 19TH)]
+	O2: [(OAK, COLS), (B1, BAYF)]
+
+STN RT INFO
+Next arrivals:
+	1: [ ... ]
+	2: [ ... ]
+	3: [ ... ]
+
+STN RT ARRIVAL STRUCT
+trip id: <string>
+est arr: <unix time>
+
+TRIP INFO
+Id: <string>
+Line: "Yellow"
+Dir: 1/2
+Dest: look based on last item in trip
+
+TRIP RT INFO
+Cancelled: Look up how to check this, see https://www.youtube.com/watch?v=uF74R17eF7M for how to display
+Gen: <get from rt trip info, door count>
+Num cars: <get from legacy api>
+State: Leaving
+CurrPrev: 12TH
+DeptTime: <unix time>
+NArrTime: <unix time>
+Next: WOAK
+Prog: 0.0
+
+ADVISORIES
+Alerts: RT
+Elevators: RT
+Marketing: Manual
+BART Advisories: Manual
