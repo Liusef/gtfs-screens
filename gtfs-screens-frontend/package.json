@@ -11,7 +11,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"wasm": "wasm-pack build ../gtfs-screens-backend --target web",
-		"deploy": "npm run build && touch build/.nojekyll && gh-pages -d build -t true"
+		"deploy": "npm run wasm && npm run build && touch build/.nojekyll && gh-pages -d build -t true"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "^3.0.1",

@@ -24,11 +24,18 @@ Route Order: (index in route arr)
 	R1: 15
 	R2: 8
 	O1: 12
-	o2: 8
+	O2: 8
 Platforms: 
-	1: [Y1]
-	2: [Y2, R2, O2]
-	3: [R1, O1]
+	Y1: 1
+	Y2: 2
+	R1: 3
+	R2: 2
+	O1: 3
+	O2: 2
+Boarding Direction:
+	1: Right
+	2: Right
+	3: Left
 Transfers per ld:
 	Y1: [(R1, 19TH), (O1, 19TH)]
 	Y2: [(R2, BALB)]
@@ -36,6 +43,10 @@ Transfers per ld:
 	R2: [(Y2, BALB)]
 	O1: [(Y1, 19TH)]
 	O2: [(OAK, COLS), (B1, BAYF)]
+Travel Time from Stn:
+	LAKE: 000
+	WOAK: 000
+	19TH: 000
 
 STN RT INFO
 Next arrivals:
