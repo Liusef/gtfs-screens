@@ -1,25 +1,61 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, fs};
 
-use gtfs_structures::{self, Id};
-pub use agency_structs::sfbart;
+use agency_structs::{structures, extensions::sfbart::{SfbartExt, SfbartExtRoute}, structures::Station};
+use gtfs_structures::{self, Id, LocationType};
 
-
+const SFBART_PREFIX: &str = "sfbart";
 const SFBART_STATIC: &str = "https://www.bart.gov/dev/schedules/google_transit.zip";
-const SFBART_RT_TRIPUPDATE: &str = "http://api.bart.gov/gtfsrt/tripupdate.aspx";
-const SFBART_RT_ALERTS: &str = "http://api.bart.gov/gtfsrt/alerts.aspx";
+// const SFBART_RT_TRIPUPDATE: &str = "http://api.bart.gov/gtfsrt/tripupdate.aspx";
+// const SFBART_RT_ALERTS: &str = "http://api.bart.gov/gtfsrt/alerts.aspx";
 
-fn ingest() {
-    let gtfs = gtfs_structures::Gtfs::new(SFBART_STATIC);
+const SFBART_POINTS_OF_INTEREST_ARR: [(&str, (&str, &str));4] = [
+    ("SFIA", ("SFO Airport", "San Francisco International Airport")),
+    ("BALB", ("SF", "San Francisco")),
+    ("EMBR", ("SF", "San Francisco")),
+    ("COLS", ("OAK Airport", "Oakland International Airport"))
+];
 
+pub fn ingest(path: &std::path::Path) {
+    let gtfs_res = gtfs_structures::Gtfs::new(SFBART_STATIC);
+    let mut gtfs = match gtfs_res {
+        Ok(val) => val,
+        Err(e) => panic!("{e}"),
+    };
+    let mut routes = init_routes(&mut gtfs);
+    let mut stops = init_stops(&mut gtfs);
+    let mut trips = init_trips(&mut gtfs);
+    hydrate_stage_1(&mut stops, &mut routes, &mut trips);
+    hydrate_stage_2(&mut stops, &mut routes, &mut trips);
 
+    // serialize
+    let route_serialized = serde_json::to_string_pretty(&routes).expect("Could not serialize route");
+    let stops_serialized = serde_json::to_string_pretty(&stops).expect("Could not serialize stops");
+    let trips_serialized = serde_json::to_string_pretty(&trips).expect("Could not serialize trips");
+
+    let npath = path.join(SFBART_PREFIX);
+    if !npath.exists() {
+        fs::create_dir(&npath).expect(format!("Could not create folder {}", &npath.to_str().unwrap()).as_str());
+    }
+
+    fs::write(npath.join("routes.json"), &route_serialized).expect("Could not write to file routes.json");
+    fs::write(npath.join("stops.json"), &stops_serialized).expect("Could not write to file stops.json");
+    fs::write(npath.join("trips.json"), &trips_serialized).expect("Could not write to file trips.json");
 }
 
-fn gen_lines(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, sfbart::Line> {
-    let mut r: HashMap<String, sfbart::Line> = HashMap::new();
+type SfbartRoute = structures::Route<SfbartExt>;
+type SfbartStop = structures::Stop<SfbartExt>;
+type SfbartTrip = structures::Trip<SfbartExt>;
+
+fn init_routes(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartRoute> {
+    let mut retval: HashMap<String, SfbartRoute> = HashMap::new();
     
+    // Iterate through all routes provided in GTFS static data
     for (key, val) in gtfs.routes.iter() {
         let id = &val.id().to_string();
         let mut stops: Vec<String> = vec!();
+
+        // Only way to get stop list is to find a trip under this route
+        // then save the sequence of stops
         for (_, v1) in gtfs.trips.iter() {
             if &v1.route_id == id {
                 for v in &v1.stop_times {
@@ -28,38 +64,166 @@ fn gen_lines(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, sfbart::Line> 
                 break;
             }
         }
+
         let start = &stops[0];
         let end = &stops[stops.len()-1];
-        let mut rt = sfbart::Line{
+        let mut rt = structures::Route{
+            // ID is required
             id: id.to_owned(),
+
+            // Shortname isn't always provided but usually is. If not provided defaults to "Route <id>"
             shortname: match val.short_name.clone() {
                 Some(x) => x,
                 None => format!("Route {id}")
-            },
+            }, 
+
+            // Longname isn't always provided. If not provided, defaults to "<Start> to <End> Line"
             longname: match val.long_name.clone() {
                 Some(x) => x,
-                None => format!("{start} to {end}")
+                None => format!("{start} to {end} Line")
             },
-            color: val.text_color.to_string(),
             route: stops,
-            poi: vec!((10, format!("Shortname"), format!("Longname"))),
-            trips: HashSet::new()
+            asset: None,
+            color: val.text_color.to_string(),
+            trips: HashSet::new(),
+            extension: SfbartExt::default(),
         };
+
+        rt.extension.route = Some(SfbartExtRoute {
+            poi: vec!(),
+        });
+
+        // Generating a list of trips associated w/ this route
         for (k1, v1) in gtfs.trips.iter() {
             if &v1.route_id == id {
-                rt.trips.insert(k1.clone());
+                rt.trips.insert(k1.to_string());
             }
         }
-        r.insert(key.to_string(), rt);
+        retval.insert(key.to_string(), rt);
+    }
+
+    // remaining data to initialize in hydration or by hand:
+    //  asset: Icon representing a given line, should probably use gen2 icon w/ associated color
+    //  extension.route.poi: Points of interest along route, probably need to do some manual work here
+
+    retval
+}
+
+fn init_stops(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartStop> {
+    let mut retval: HashMap<String, structures::Stop<SfbartExt>> = HashMap::new();
+
+    // Loop through all stops in the system
+    for (k, v) in gtfs.stops.iter() {
+        if v.location_type != LocationType::StopPoint { continue }
+
+        let mut stop = structures::Stop{
+            id: v.id().to_string(),
+            name: v.name.clone().unwrap(),
+            routes: HashSet::new(),
+            route_index: HashMap::new(),
+            travel_times: HashMap::new(),
+            station_meta: Some(Station{
+                platforms: HashMap::new(),
+                opening_side: HashMap::new(),
+                extension: SfbartExt::default(),
+            }),
+            transfers: None,
+            extension: SfbartExt::default(),
+        };
+
+        retval.insert(k.to_string(), stop);
+
+    }
+
+    retval
+}
+
+fn init_trips(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartTrip> {
+    let mut r: HashMap<String, structures::Trip<SfbartExt>> = HashMap::new();
+
+    for (k, v) in gtfs.trips.iter() {
+        let mut tr = structures::Trip {
+            id: v.id().to_string(),
+            route_id: (&v.route_id).to_string(),
+            route_shortname: String::new(),
+            departures: vec!(),
+            extension: SfbartExt::default(),
+        };
+
+        for (idx, item) in v.stop_times.iter().enumerate() {
+            if idx > 0 && item.stop.id == v.stop_times[idx-1].stop.id {
+                let depts = &mut tr.departures;
+                let ld = depts.len();
+                depts[ld - 1].departure = item.departure_time.unwrap() as i64;
+                continue;
+            }
+            tr.departures.push(structures::TripArrival{
+                trip_id: k.to_string(),
+                station_id: item.stop.id.to_string(),
+                arrival: item.arrival_time.unwrap() as i64,
+                departure: item.departure_time.unwrap() as i64,
+                extension: SfbartExt::default(),
+            })
+        }
+
+        
+        r.insert(k.to_string(), tr);
     }
 
     r
 }
 
-fn gen_stations(gtfs: gtfs_structures::Gtfs) -> HashMap<String, sfbart::Station> {
-    todo!()
+fn hydrate_stage_1(stops: &mut HashMap<String, SfbartStop>, 
+    routes: &mut HashMap<String, SfbartRoute>, 
+    trips: &mut HashMap<String, SfbartTrip>) -> () {
+
+        // Hydrate stop routes and route indices
+        for (rte_id, route) in routes.iter() {
+            for (idx, stop_id) in route.route.iter().enumerate() {
+                let stop = match stops.get_mut(stop_id) {
+                    None => continue,
+                    Some(val) => val,
+                };
+                stop.routes.insert(rte_id.to_string());
+                stop.route_index.insert(rte_id.to_string(), idx as i32);
+                
+                // inner loop body from here on is for populating travel times
+                let trip_id = match route.trips.iter().next() {
+                    None => continue,
+                    Some(val) => val
+                };
+                let trip = &trips[trip_id];
+                if idx >= trip.departures.len() - 1 { continue };
+                stop.travel_times.insert(rte_id.to_string(), trip.departures[idx+1].arrival - trip.departures[idx].departure);
+            }
+            
+        }
+
+        // Hydrate points of interest along routes
+        let poimap = HashMap::from(SFBART_POINTS_OF_INTEREST_ARR);
+        for (_, route) in routes.iter_mut() {
+            let mut visited: HashSet<&str> = HashSet::new();
+            if route.extension.route.is_none() {
+                route.extension.route = Some(SfbartExtRoute {
+                    poi: vec!()
+                });
+            }
+            for (idx, stop) in route.route.iter().enumerate() {
+                if poimap.contains_key(stop.as_str()) {
+                    let (sn, ln) = poimap[stop.as_str()];
+                    if visited.contains(sn) { continue; }
+                    visited.insert(sn);
+                    route.extension.route.as_mut().unwrap().poi.push((idx as i32, sn.to_string(), ln.to_string()));
+                }
+            }
+        }
+
+
+
 }
 
-fn gen_trips(gtfs: gtfs_structures::Gtfs) -> HashMap<String, sfbart::Trip> {
-    todo!()
+fn hydrate_stage_2(stops: &mut HashMap<String, SfbartStop>, 
+    routes: &mut HashMap<String, SfbartRoute>, 
+    trips: &mut HashMap<String, SfbartTrip>) -> () {
+
 }
