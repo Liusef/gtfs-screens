@@ -27,7 +27,6 @@ pub fn ingest(path: &std::path::Path) {
     let mut stops = init_stops(&mut gtfs);
     let mut trips = init_trips(&mut gtfs);
     hydrate_stage_1(&mut stops, &mut routes, &mut trips);
-    hydrate_stage_2(&mut stops, &mut routes, &mut trips);
 
     // serialize
     let agency_serialized = serde_json::to_string_pretty(&agency).expect("Could not serialize agency");
@@ -124,7 +123,7 @@ fn init_stops(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartStop> {
     for (k, v) in gtfs.stops.iter() {
         if v.location_type != LocationType::StopPoint { continue }
 
-        let mut stop = structures::Stop{
+        let stop = structures::Stop{
             id: v.id().to_string(),
             name: v.name.clone().unwrap(),
             routes: HashSet::new(),
@@ -170,11 +169,9 @@ fn init_trips(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartTrip> {
                 continue;
             }
             tr.departures.push(structures::TripArrival{
-                trip_id: k.to_string(),
                 stop_id: item.stop.id.to_string(),
                 arrival: item.arrival_time.unwrap() as i64,
                 departure: item.departure_time.unwrap() as i64,
-                extension: SfbartExt::default(),
             })
         }
 
@@ -193,7 +190,9 @@ fn hydrate_stage_1(stops: &mut HashMap<String, SfbartStop>,
     trips: &mut HashMap<String, SfbartTrip>) -> () {
 
         // Hydrate stop routes and travel times
-        for (_, trip) in trips.iter() {
+        for (_, trip) in trips.iter_mut() {
+            trip.route_shortname = routes[&trip.route_id].shortname.clone();
+
             for (idx, arrival) in trip.departures.iter().enumerate() {
                 // hydrate which routes go to this station
                 let stop = stops.get_mut(&arrival.stop_id).unwrap();
@@ -236,11 +235,5 @@ fn hydrate_stage_1(stops: &mut HashMap<String, SfbartStop>,
         }
 
 
-
-}
-
-fn hydrate_stage_2(stops: &mut HashMap<String, SfbartStop>, 
-    routes: &mut HashMap<String, SfbartRoute>, 
-    trips: &mut HashMap<String, SfbartTrip>) -> () {
 
 }
