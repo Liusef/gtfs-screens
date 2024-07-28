@@ -1,12 +1,12 @@
 use std::{collections::{HashMap, HashSet}, fs};
 
-use agency_structs::{structures, extensions::sfbart::{SfbartExt, SfbartExtRoute}, structures::Station};
+use agency_structs::{structures, extensions::sfbart::{SfbartExt, SfbartExtTrip}, structures::Station};
 use gtfs_structures::{self, Id, LocationType};
 
 const SFBART_PREFIX: &str = "sfbart";
 const SFBART_STATIC: &str = "https://www.bart.gov/dev/schedules/google_transit.zip";
-// const SFBART_RT_TRIPUPDATE: &str = "http://api.bart.gov/gtfsrt/tripupdate.aspx";
-// const SFBART_RT_ALERTS: &str = "http://api.bart.gov/gtfsrt/alerts.aspx";
+const SFBART_RT_TRIPUPDATE: &str = "http://api.bart.gov/gtfsrt/tripupdate.aspx";
+const SFBART_RT_ALERTS: &str = "http://api.bart.gov/gtfsrt/alerts.aspx";
 
 const SFBART_POINTS_OF_INTEREST_ARR: [(&str, (&str, &str));4] = [
     ("SFIA", ("SFO Airport", "San Francisco International Airport")),
@@ -21,6 +21,8 @@ pub fn ingest(path: &std::path::Path) {
         Ok(val) => val,
         Err(e) => panic!("{e}"),
     };
+
+    let agency = init_agency(&gtfs);
     let mut routes = init_routes(&mut gtfs);
     let mut stops = init_stops(&mut gtfs);
     let mut trips = init_trips(&mut gtfs);
@@ -28,6 +30,7 @@ pub fn ingest(path: &std::path::Path) {
     hydrate_stage_2(&mut stops, &mut routes, &mut trips);
 
     // serialize
+    let agency_serialized = serde_json::to_string_pretty(&agency).expect("Could not serialize agency");
     let route_serialized = serde_json::to_string_pretty(&routes).expect("Could not serialize route");
     let stops_serialized = serde_json::to_string_pretty(&stops).expect("Could not serialize stops");
     let trips_serialized = serde_json::to_string_pretty(&trips).expect("Could not serialize trips");
@@ -37,6 +40,7 @@ pub fn ingest(path: &std::path::Path) {
         fs::create_dir(&npath).expect(format!("Could not create folder {}", &npath.to_str().unwrap()).as_str());
     }
 
+    fs::write(npath.join("agency.json"), &agency_serialized).expect("Could not write to file agency.json");
     fs::write(npath.join("routes.json"), &route_serialized).expect("Could not write to file routes.json");
     fs::write(npath.join("stops.json"), &stops_serialized).expect("Could not write to file stops.json");
     fs::write(npath.join("trips.json"), &trips_serialized).expect("Could not write to file trips.json");
@@ -46,27 +50,36 @@ type SfbartRoute = structures::Route<SfbartExt>;
 type SfbartStop = structures::Stop<SfbartExt>;
 type SfbartTrip = structures::Trip<SfbartExt>;
 
+fn init_agency(gtfs: &gtfs_structures::Gtfs) -> structures::AgencyData<SfbartExt> {
+    structures::AgencyData {
+        name: gtfs.agencies[0].name.clone(),
+        timezone: gtfs.agencies[0].timezone.clone(),
+        uri: gtfs.agencies[0].url.clone(),
+        static_uri: SFBART_STATIC.to_string(),
+        tripupdate_uri: Some(SFBART_RT_TRIPUPDATE.to_string()),
+        vehiclepos_uri: None,
+        advisories_uri: Some(SFBART_RT_ALERTS.to_string()),
+        extension: SfbartExt::default()
+    }
+}
+
 fn init_routes(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartRoute> {
     let mut retval: HashMap<String, SfbartRoute> = HashMap::new();
     
     // Iterate through all routes provided in GTFS static data
     for (key, val) in gtfs.routes.iter() {
         let id = &val.id().to_string();
-        let mut stops: Vec<String> = vec!();
+        let (mut start, mut end) = ("Start".to_string(), "End".to_string());
 
         // Only way to get stop list is to find a trip under this route
         // then save the sequence of stops
         for (_, v1) in gtfs.trips.iter() {
             if &v1.route_id == id {
-                for v in &v1.stop_times {
-                    stops.push(v.stop.id.clone());
-                }
-                break;
+                start = v1.stop_times[0].stop.as_ref().name.as_ref().unwrap().to_string();
+                end = v1.stop_times[v1.stop_times.len() - 1].stop.name.as_ref().unwrap().to_string();
             }
         }
 
-        let start = &stops[0];
-        let end = &stops[stops.len()-1];
         let mut rt = structures::Route{
             // ID is required
             id: id.to_owned(),
@@ -82,16 +95,12 @@ fn init_routes(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartRoute>
                 Some(x) => x,
                 None => format!("{start} to {end} Line")
             },
-            route: stops,
             asset: None,
-            color: val.text_color.to_string(),
+            color: val.color.to_string(),
+            text_color: val.text_color.to_string(),
             trips: HashSet::new(),
             extension: SfbartExt::default(),
         };
-
-        rt.extension.route = Some(SfbartExtRoute {
-            poi: vec!(),
-        });
 
         // Generating a list of trips associated w/ this route
         for (k1, v1) in gtfs.trips.iter() {
@@ -104,7 +113,6 @@ fn init_routes(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartRoute>
 
     // remaining data to initialize in hydration or by hand:
     //  asset: Icon representing a given line, should probably use gen2 icon w/ associated color
-    //  extension.route.poi: Points of interest along route, probably need to do some manual work here
 
     retval
 }
@@ -120,7 +128,6 @@ fn init_stops(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartStop> {
             id: v.id().to_string(),
             name: v.name.clone().unwrap(),
             routes: HashSet::new(),
-            route_index: HashMap::new(),
             travel_times: HashMap::new(),
             station_meta: Some(Station{
                 platforms: HashMap::new(),
@@ -134,6 +141,11 @@ fn init_stops(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartStop> {
         retval.insert(k.to_string(), stop);
 
     }
+
+    // remaining data to initialize in hydration or by hand:
+    //  routes
+    //  travel_times
+    //  all station metadata
 
     retval
 }
@@ -159,13 +171,16 @@ fn init_trips(gtfs: &mut gtfs_structures::Gtfs) -> HashMap<String, SfbartTrip> {
             }
             tr.departures.push(structures::TripArrival{
                 trip_id: k.to_string(),
-                station_id: item.stop.id.to_string(),
+                stop_id: item.stop.id.to_string(),
                 arrival: item.arrival_time.unwrap() as i64,
                 departure: item.departure_time.unwrap() as i64,
                 extension: SfbartExt::default(),
             })
         }
 
+        tr.extension.trip = Some(SfbartExtTrip{
+            poi: vec![]
+        });
         
         r.insert(k.to_string(), tr);
     }
@@ -177,43 +192,45 @@ fn hydrate_stage_1(stops: &mut HashMap<String, SfbartStop>,
     routes: &mut HashMap<String, SfbartRoute>, 
     trips: &mut HashMap<String, SfbartTrip>) -> () {
 
-        // Hydrate stop routes and route indices
-        for (rte_id, route) in routes.iter() {
-            for (idx, stop_id) in route.route.iter().enumerate() {
-                let stop = match stops.get_mut(stop_id) {
-                    None => continue,
-                    Some(val) => val,
-                };
-                stop.routes.insert(rte_id.to_string());
-                stop.route_index.insert(rte_id.to_string(), idx as i32);
-                
-                // inner loop body from here on is for populating travel times
-                let trip_id = match route.trips.iter().next() {
-                    None => continue,
-                    Some(val) => val
-                };
-                let trip = &trips[trip_id];
-                if idx >= trip.departures.len() - 1 { continue };
-                stop.travel_times.insert(rte_id.to_string(), trip.departures[idx+1].arrival - trip.departures[idx].departure);
+        // Hydrate stop routes and travel times
+        for (_, trip) in trips.iter() {
+            for (idx, arrival) in trip.departures.iter().enumerate() {
+                // hydrate which routes go to this station
+                let stop = stops.get_mut(&arrival.stop_id).unwrap();
+                stop.routes.insert(trip.route_id.to_string());
+
+                // populate travel times
+                if idx >= trip.departures.len() - 1 { continue } // need to see next stop on the line, if at EOL then what's the next stn?
+                let next_arrival = &trip.departures[idx+1];
+                let curr_diff = next_arrival.arrival - arrival.departure;
+
+                let (rte, stn) = (trip.route_id.to_string(), next_arrival.stop_id.to_string());
+                if !stop.travel_times.contains_key(&rte) {
+                    stop.travel_times.insert(rte.clone(), HashMap::new());
+                }
+                let populated = stop.travel_times.contains_key(&stn);
+                if !populated || populated && stop.travel_times[&rte][&stn] < curr_diff {
+                    stop.travel_times.get_mut(&rte).unwrap().insert(stn.clone(), curr_diff);
+                }
             }
-            
         }
 
-        // Hydrate points of interest along routes
+
+        // Hydrate points of interest along trips
         let poimap = HashMap::from(SFBART_POINTS_OF_INTEREST_ARR);
-        for (_, route) in routes.iter_mut() {
+        for (_, trip) in trips.iter_mut() {
             let mut visited: HashSet<&str> = HashSet::new();
-            if route.extension.route.is_none() {
-                route.extension.route = Some(SfbartExtRoute {
+            if trip.extension.trip.is_none() {
+                trip.extension.trip = Some(SfbartExtTrip {
                     poi: vec!()
                 });
             }
-            for (idx, stop) in route.route.iter().enumerate() {
-                if poimap.contains_key(stop.as_str()) {
-                    let (sn, ln) = poimap[stop.as_str()];
+            for (idx, arrival) in trip.departures.iter().enumerate() {
+                if poimap.contains_key(arrival.stop_id.as_str()) {
+                    let (sn, ln) = poimap[arrival.stop_id.as_str()];
                     if visited.contains(sn) { continue; }
                     visited.insert(sn);
-                    route.extension.route.as_mut().unwrap().poi.push((idx as i32, sn.to_string(), ln.to_string()));
+                    trip.extension.trip.as_mut().unwrap().poi.push((idx as i32, sn.to_string(), ln.to_string()));
                 }
             }
         }

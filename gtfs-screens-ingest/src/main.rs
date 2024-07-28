@@ -1,9 +1,11 @@
-use std::env;
+use std::{env, time::Instant};
 
 mod sfbart;
 
 
 fn main() {
+    let start = Instant::now();
+
     let argv: Vec<String> = env::args().collect();
 
     if argv.len() < 2 {
@@ -17,4 +19,6 @@ fn main() {
     }
 
     sfbart::ingest(&path);
+
+    println!("\x1b[34mIngest job took \x1b[33m{:?}\x1b[34m to complete.\x1b[0m", start.elapsed());
 }
