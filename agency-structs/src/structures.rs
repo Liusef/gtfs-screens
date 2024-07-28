@@ -18,13 +18,25 @@ pub type PlatformNo = i32;
 pub type Asset = String;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct AgencyData<T> {
+    pub name: String,
+    pub timezone: String,
+    pub uri: String,
+    pub static_uri: String,
+    pub tripupdate_uri: Option<String>,
+    pub vehiclepos_uri: Option<String>,
+    pub advisories_uri: Option<String>,
+    pub extension: T
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Route<T> {
     pub id: RouteId,
     pub shortname: Shortname,
     pub longname: Longname,
     pub asset: Option<Asset>,
     pub color: String,
-    pub route: Vec<StopId>,
+    pub text_color: String, 
     pub trips: HashSet<TripId>,
     pub extension: T,
 }
@@ -49,8 +61,7 @@ pub struct Stop<T> {
     pub id: String,
     pub name: String, 
     pub routes: HashSet<RouteId>,
-    pub route_index: HashMap<RouteId, Index>,
-    pub travel_times: HashMap<StopId, UnixTime>,  // Travel times to neighboring stops
+    pub travel_times: HashMap<RouteId, HashMap<StopId, UnixTime>>,  // Travel times to neighboring stops
     pub station_meta: Option<Station<T>>,
     pub transfers: Option<Transfers>,
     pub extension: T,
@@ -79,12 +90,10 @@ pub struct Transfers {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct TripArrival<T> {
-    pub trip_id: TripId,
-    pub station_id: StopId,
+pub struct TripArrival {
+    pub stop_id: StopId,
     pub arrival: UnixTime,
     pub departure: UnixTime,
-    pub extension: T,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -92,7 +101,7 @@ pub struct Trip<T> {
     pub id: TripId,
     pub route_id: RouteId,
     pub route_shortname: Shortname,
-    pub departures: Vec<TripArrival<T>>,
+    pub departures: Vec<TripArrival>,
     pub extension: T,
 }
 

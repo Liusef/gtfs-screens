@@ -157,3 +157,5 @@ internal
 .eslintcache
 .svelte-kit
 package-lock.json
+
+*generated/

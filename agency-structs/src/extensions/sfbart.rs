@@ -8,22 +8,28 @@ pub enum OpeningSide {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SfbartExt {
-    pub route       : Option<SfbartExtRoute>,
+    // pub agency      : Option<SfbartExtAgency>,
+    // pub route       : Option<SfbartExtRoute>,
     // pub route_rt    : Option<SfbartExtRouteRt>,
     // pub station     : Option<SfbartExtStation>,
     // pub stop        : Option<SfbartExtStop>,
     // pub stop_arr    : Option<SfbartExtStopArrival>,
     // pub stop_rt     : Option<SfbartExtStopRt>,
     // pub trip_arr    : Option<SfbartExtTripArrival>,
-    // pub trip        : Option<SfbartExtTrip>,
+    pub trip        : Option<SfbartExtTrip>,
     pub trip_rt     : Option<SfbartExtTripRt>,
     pub advisory    : Option<SfbartExtAdvisory>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SfbartExtRoute {
-    pub poi: Vec<(i32, Shortname, Longname)>,
-}
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct SfbartExtAgency {
+    
+// }
+
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct SfbartExtRoute {
+    
+// }
 
 // #[derive(Serialize, Deserialize, Debug)]
 // pub struct SfbartExtRouteRt {
@@ -55,10 +61,10 @@ pub struct SfbartExtRoute {
 
 // }
 
-// #[derive(Serialize, Deserialize, Debug)]
-// pub struct SfbartExtTrip {
-
-// }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SfbartExtTrip {
+    pub poi: Vec<(i32, Shortname, Longname)>,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SfbartExtTripRt {
