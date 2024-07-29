@@ -11,3 +11,4 @@ extern "C" {
 pub fn greet() {
     alert("Hello, gtfs-screens-backend!");
 }
+

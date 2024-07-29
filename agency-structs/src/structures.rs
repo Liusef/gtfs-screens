@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::string::String;
 use serde::{Serialize, Deserialize};
+use crate::extensions::*;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum OpeningSide {
@@ -17,8 +18,9 @@ pub type UnixTime = i64;
 pub type PlatformNo = i32;
 pub type Asset = String;
 
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AgencyData<T> {
+pub struct AgencyData {
     pub name: String,
     pub timezone: String,
     pub uri: String,
@@ -26,11 +28,11 @@ pub struct AgencyData<T> {
     pub tripupdate_uri: Option<String>,
     pub vehiclepos_uri: Option<String>,
     pub advisories_uri: Option<String>,
-    pub extension: T
+    pub extension: Extensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Route<T> {
+pub struct Route {
     pub id: RouteId,
     pub shortname: Shortname,
     pub longname: Longname,
@@ -38,48 +40,48 @@ pub struct Route<T> {
     pub color: String,
     pub text_color: String, 
     pub trips: HashSet<TripId>,
-    pub extension: T,
+    pub extension: Extensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RouteRealtime<T> {
+pub struct RouteRealtime {
     pub id: RouteId,
     pub shortname: String,
     pub active_trips: HashSet<TripId>,
-    pub extension: T
+    pub extension: Extensions
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Station<T> {
+pub struct Station {
     pub platforms: HashMap<RouteId, PlatformNo>,
     pub opening_side: HashMap<RouteId, OpeningSide>,
-    pub extension: T
+    pub extension: Extensions
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Stop<T> {
+pub struct Stop {
     pub id: String,
     pub name: String, 
     pub routes: HashSet<RouteId>,
     pub travel_times: HashMap<RouteId, HashMap<StopId, UnixTime>>,  // Travel times to neighboring stops
-    pub station_meta: Option<Station<T>>,
+    pub station_meta: Option<Station>,
     pub transfers: Option<Transfers>,
-    pub extension: T,
+    pub extension: Extensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct StopArrival<T> {
+pub struct StopArrival {
     pub trip_id: String,
     pub est_arrival: UnixTime,
-    pub extension: T
+    pub extension: Extensions
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct StopRealtime<T> {
+pub struct StopRealtime {
     pub id: StopId,
     pub name: String,
-    pub arrivals: HashMap<PlatformNo, Vec<StopArrival<T>>>,
-    pub extension: T,
+    pub arrivals: HashMap<PlatformNo, Vec<StopArrival>>,
+    pub extension: Extensions
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -97,12 +99,12 @@ pub struct TripArrival {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Trip<T> {
+pub struct Trip {
     pub id: TripId,
     pub route_id: RouteId,
     pub route_shortname: Shortname,
     pub departures: Vec<TripArrival>,
-    pub extension: T,
+    pub extension: Extensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
